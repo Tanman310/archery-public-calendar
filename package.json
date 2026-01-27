@@ -2,6 +2,7 @@
     "name": "archery-public-calendar",
     "private": true,
     "version": "1.0.0",
+    "type": "module",
     "devDependencies": {
         "eslint": "^9.39.2",
         "html-validate": "^8.18.0"
