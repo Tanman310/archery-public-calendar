@@ -77,6 +77,7 @@
 
     // Expected CSV headers (row 1):
     // Event Date, Start Time, End Time, Title, Location, Category, Canceled
+    // Also accepts: Date, Start, End (for compatibility with existing sheets)
 
     function setStatus(text, kind = "") {
       const el = document.getElementById("status");
@@ -148,11 +149,11 @@
     }
 
     function toFullCalendarEvent(row) {
-      const eventDate = parseMMDDYYYY(row["Event Date"]);
+      const eventDate = parseMMDDYYYY(row["Event Date"] ?? row["Date"]);
       if (!eventDate) return null;
 
-      const startTime = parseHHMM24(row["Start Time"]);
-      const endTime = parseHHMM24(row["End Time"]);
+      const startTime = parseHHMM24(row["Start Time"] ?? row["Start"]);
+      const endTime = parseHHMM24(row["End Time"] ?? row["End"]);
 
       const title = String(row["Title"] ?? "").trim() || "Event";
       const location = String(row["Location"] ?? "").trim();
