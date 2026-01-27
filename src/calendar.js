@@ -17,31 +17,31 @@ export function truthy(val) {
 
 export function parseMMDDYYYY(s) {
     const t = String(s || "").trim();
-    if (!t) return null;
+    if (!t) { return null; }
     const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
+    if (!m) { return null; }
     const mm = Number(m[1]),
         dd = Number(m[2]),
         yyyy = Number(m[3]);
-    if (!mm || !dd || !yyyy) return null;
+    if (!mm || !dd || !yyyy) { return null; }
     return { yyyy, mm, dd };
 }
 
 export function parseHHMM24(s) {
     const t = String(s || "").trim();
-    if (!t) return null;
+    if (!t) { return null; }
     const m = t.match(/^(\d{1,2}):(\d{2})$/);
-    if (!m) return null;
+    if (!m) { return null; }
     const hh = Number(m[1]),
         min = Number(m[2]);
-    if (Number.isNaN(hh) || Number.isNaN(min)) return null;
-    if (hh < 0 || hh > 23 || min < 0 || min > 59) return null;
+    if (Number.isNaN(hh) || Number.isNaN(min)) { return null; }
+    if (hh < 0 || hh > 23 || min < 0 || min > 59) { return null; }
     return { hh, min };
 }
 
 export function makeLocalDate(dateObj, timeObj) {
     const monthIndex = dateObj.mm - 1;
-    if (!timeObj) return new Date(dateObj.yyyy, monthIndex, dateObj.dd);
+    if (!timeObj) { return new Date(dateObj.yyyy, monthIndex, dateObj.dd); }
     return new Date(dateObj.yyyy, monthIndex, dateObj.dd, timeObj.hh, timeObj.min, 0, 0);
 }
 
@@ -60,7 +60,7 @@ export function isPastEvent(ev) {
 
 export function toFullCalendarEvent(row) {
     const eventDate = parseMMDDYYYY(row["Event Date"] ?? row["Date"]);
-    if (!eventDate) return null;
+    if (!eventDate) { return null; }
 
     const startTime = parseHHMM24(row["Start Time"] ?? row["Start"]);
     const endTime = parseHHMM24(row["End Time"] ?? row["End"]);
@@ -76,7 +76,7 @@ export function toFullCalendarEvent(row) {
     let end = null;
     if (endTime) {
         end = makeLocalDate(eventDate, endTime);
-        if (end <= start) end = null;
+        if (end <= start) {end = null;}
     }
 
     const ev = {
@@ -92,8 +92,8 @@ export function toFullCalendarEvent(row) {
         classNames: []
     };
 
-    if (canceled) ev.classNames.push("is-canceled");
-    if (isPastEvent(ev)) ev.classNames.push("is-past");
+    if (canceled) {ev.classNames.push("is-canceled");}
+    if (isPastEvent(ev)) {ev.classNames.push("is-past");}
 
     return ev;
 }
