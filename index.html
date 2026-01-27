@@ -72,14 +72,14 @@
   </header>
 
   <main class="wrap">
-    <section class="intro">
+    <section class="intro" aria-label="Introduction and status">
       <div class="card">
         <h2>How to use</h2>
         <p>Tap an event to see details. Colors group events by category, and canceled events are clearly labeled.</p>
         <ul class="legend">
-          <li><span>🗓️</span> All-day events show without a time.</li>
-          <li><span>⏳</span> Past events appear dimmed.</li>
-          <li><span>🚫</span> Canceled events are crossed out.</li>
+          <li><span role="img" aria-label="All-day event">🗓️</span> All-day events show without a time.</li>
+          <li><span role="img" aria-label="Past event">⏳</span> Past events appear dimmed.</li>
+          <li><span role="img" aria-label="Canceled event">🚫</span> Canceled events are crossed out.</li>
         </ul>
       </div>
       <div class="card">
@@ -88,7 +88,7 @@
         <div id="updated" class="status-meta">Last updated: —</div>
       </div>
     </section>
-    <section id="calendar" class="card"></section>
+    <section id="calendar" class="card" aria-label="Event calendar"></section>
   </main>
 
   <script>
