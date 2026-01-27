@@ -3,9 +3,12 @@
     "private": true,
     "version": "1.0.0",
     "devDependencies": {
+        "eslint": "^9.39.2",
         "html-validate": "^8.18.0"
     },
     "scripts": {
-        "validate:html": "html-validate \"index.html\""
+        "validate:html": "html-validate \"index.html\"",
+        "lint": "eslint \"src/**/*.js\"",
+        "lint:fix": "eslint --fix \"src/**/*.js\""
     }
 }
