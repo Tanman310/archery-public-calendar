@@ -10,6 +10,7 @@
     "scripts": {
         "validate:html": "html-validate \"index.html\"",
         "lint": "eslint \"src/**/*.js\"",
-        "lint:fix": "eslint --fix \"src/**/*.js\""
+        "lint:fix": "eslint --fix \"src/**/*.js\"",
+        "check:config": "node scripts/check-config.js"
     }
 }
