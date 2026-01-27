@@ -1,0 +1,296 @@
+<!-- index.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>East Middle Missiles Archery Calendar</title>
+
+  <!-- FullCalendar (CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+
+  <!-- CSV parser -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    header { padding: 12px 14px; border-bottom: 1px solid #e5e5e5; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    header .sub { margin-top: 4px; font-size: 12px; opacity: 0.75; }
+
+    .wrap { padding: 10px; max-width: 1100px; margin: 0 auto; }
+    #calendar { background: #fff; border: 1px solid #e9e9e9; border-radius: 10px; padding: 8px; }
+
+    .status { font-size: 13px; padding: 10px 12px; border: 1px solid #e9e9e9; border-radius: 10px; margin-bottom: 10px; }
+    .status.error { border-color: #f3b3b3; background: #fff5f5; }
+    .status.ok { border-color: #cfe9d1; background: #f6fff7; }
+
+    /* Past events: dim */
+    .fc-event.is-past { opacity: 0.55; }
+
+    /* Canceled events: strike + tag + dim a bit more */
+    .fc-event.is-canceled .fc-event-title,
+    .fc-event.is-canceled .fc-event-title-container,
+    .fc-event.is-canceled .fc-event-main { text-decoration: line-through; }
+    .fc-event.is-canceled { opacity: 0.45; filter: grayscale(0.25); }
+    .canceled-badge {
+      display: inline-block;
+      font-size: 10px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 999px;
+      margin-left: 6px;
+      border: 1px solid rgba(0,0,0,0.25);
+      background: rgba(255,255,255,0.7);
+    }
+
+    /* Make list view more readable on phones */
+    @media (max-width: 640px) {
+      #calendar { padding: 6px; }
+      .fc .fc-toolbar { flex-direction: column; gap: 8px; align-items: stretch; }
+      .fc .fc-toolbar-chunk { display: flex; justify-content: space-between; }
+      .fc .fc-toolbar-title { font-size: 16px; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>East Middle Missiles Archery Calendar</h1>
+    <div class="sub">Events published from the team schedule.</div>
+  </header>
+
+  <div class="wrap">
+    <div id="status" class="status">Loading events…</div>
+    <div id="calendar"></div>
+  </div>
+
+  <script>
+    /**
+     * STEP 1: Paste your published CSV URL for the `public_events` sheet here.
+     * Example format:
+     * https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv
+     */
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT3BCyENImsHmP4TtOg2PMZkauaCWHc8wu4xSSmeU-jUgKVn6U1jpVQCHK0ACZoUtzjenfqyhdNu4PF/pub?gid=1881779158&single=true&output=csv";
+
+    // Expected CSV headers (row 1):
+    // Event Date, Start Time, End Time, Title, Location, Category, Canceled
+
+    function setStatus(text, kind = "") {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.classList.remove("error", "ok");
+      if (kind) el.classList.add(kind);
+    }
+
+    function truthy(val) {
+      const s = String(val ?? "").trim().toLowerCase();
+      return s === "true" || s === "yes" || s === "1" || s === "y" || s === "t" || s === "checked" || s === "✓" || s === "on" || s === "TRUE".toLowerCase();
+    }
+
+    function parseMMDDYYYY(s) {
+      // s like "01/27/2026"
+      const t = String(s || "").trim();
+      if (!t) return null;
+      const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!m) return null;
+      const mm = Number(m[1]), dd = Number(m[2]), yyyy = Number(m[3]);
+      if (!mm || !dd || !yyyy) return null;
+      return { yyyy, mm, dd };
+    }
+
+    function parseHHMM24(s) {
+      // s like "13:30"
+      const t = String(s || "").trim();
+      if (!t) return null;
+      const m = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) return null;
+      const hh = Number(m[1]), min = Number(m[2]);
+      if (Number.isNaN(hh) || Number.isNaN(min)) return null;
+      if (hh < 0 || hh > 23 || min < 0 || min > 59) return null;
+      return { hh, min };
+    }
+
+    function makeLocalDate(dateObj, timeObj) {
+      // dateObj: {yyyy,mm,dd}, timeObj optional: {hh,min}
+      const monthIndex = dateObj.mm - 1;
+      if (!timeObj) return new Date(dateObj.yyyy, monthIndex, dateObj.dd);
+      return new Date(dateObj.yyyy, monthIndex, dateObj.dd, timeObj.hh, timeObj.min, 0, 0);
+    }
+
+    function stableColorForCategory(category) {
+      // deterministic HSL color from string
+      const s = String(category ?? "Other");
+      let hash = 0;
+      for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+      const hue = hash % 360;
+      // Keep colors readable
+      return {
+        backgroundColor: `hsl(${hue} 70% 45%)`,
+        borderColor: `hsl(${hue} 70% 35%)`
+      };
+    }
+
+    function isPastEvent(ev) {
+      // Compare end if present, else start. All-day events: treat as past after that date ends.
+      const now = new Date();
+      if (ev.allDay) {
+        const end = ev.end ? new Date(ev.end) : null;
+        const endOfDay = end
+          ? new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999)
+          : new Date(ev.start.getFullYear(), ev.start.getMonth(), ev.start.getDate(), 23, 59, 59, 999);
+        return endOfDay < now;
+      }
+      const ref = ev.end ? new Date(ev.end) : new Date(ev.start);
+      return ref < now;
+    }
+
+    function toFullCalendarEvent(row) {
+      const eventDate = parseMMDDYYYY(row["Event Date"]);
+      if (!eventDate) return null;
+
+      const startTime = parseHHMM24(row["Start Time"]);
+      const endTime = parseHHMM24(row["End Time"]);
+
+      const title = String(row["Title"] ?? "").trim() || "Event";
+      const location = String(row["Location"] ?? "").trim();
+      const category = String(row["Category"] ?? "").trim() || "Other";
+      const canceled = truthy(row["Canceled"]);
+
+      const allDay = !startTime; // blank start time => all-day
+      const start = makeLocalDate(eventDate, startTime);
+
+      let end = null;
+      if (endTime) {
+        end = makeLocalDate(eventDate, endTime);
+        // FullCalendar treats end as exclusive for all-day events; for timed events it's fine.
+        // If end <= start (bad data), ignore end.
+        if (end <= start) end = null;
+      }
+
+      const colors = stableColorForCategory(category);
+
+      const ev = {
+        title,
+        start,
+        end: end || undefined,
+        allDay,
+        extendedProps: {
+          location,
+          category,
+          canceled
+        },
+        ...colors,
+        classNames: []
+      };
+
+      if (canceled) ev.classNames.push("is-canceled");
+      if (isPastEvent(ev)) ev.classNames.push("is-past");
+
+      return ev;
+    }
+
+    async function loadCSV(url) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(url, {
+          download: true,
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results),
+          error: (err) => reject(err)
+        });
+      });
+    }
+
+    async function main() {
+      if (!CSV_URL || CSV_URL.includes("https://docs.google.com/spreadsheets/d/e/2PACX-1vT3BCyENImsHmP4TtOg2PMZkauaCWHc8wu4xSSmeU-jUgKVn6U1jpVQCHK0ACZoUtzjenfqyhdNu4PF/pub?gid=1881779158&single=true&output=csv")) {
+        setStatus("Error: Paste your published CSV URL into CSV_URL in index.html.", "error");
+        return;
+      }
+
+      setStatus("Loading events…");
+      let parsed;
+      try {
+        parsed = await loadCSV(CSV_URL);
+      } catch (e) {
+        setStatus("Error loading CSV. Verify the sheet is published to the web as CSV and the URL is correct.", "error");
+        return;
+      }
+
+      if (parsed.errors && parsed.errors.length) {
+        setStatus("CSV parsed with errors. Check the published tab and header row formatting.", "error");
+        // continue anyway
+      }
+
+      const rows = Array.isArray(parsed.data) ? parsed.data : [];
+      const events = [];
+      for (const row of rows) {
+        const ev = toFullCalendarEvent(row);
+        if (ev) events.push(ev);
+      }
+
+      if (!events.length) {
+        setStatus("No events found. Confirm your public_events tab has rows and the expected headers.", "error");
+        return;
+      }
+
+      setStatus(`Loaded ${events.length} events.`, "ok");
+
+      const isMobile = window.matchMedia("(max-width: 640px)").matches;
+      const initialView = isMobile ? "listMonth" : "dayGridMonth";
+
+      const calendarEl = document.getElementById("calendar");
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView,
+        height: "auto",
+        nowIndicator: true,
+        headerToolbar: {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,listMonth"
+        },
+        events,
+
+        // Display times in 12-hour format
+        eventTimeFormat: {
+          hour: "numeric",
+          minute: "2-digit",
+          meridiem: "short"
+        },
+
+        // Include location + category + canceled status in popover
+        eventDidMount: function(info) {
+          const { location, category, canceled } = info.event.extendedProps;
+
+          // Add canceled badge for quick scan
+          if (canceled) {
+            const titleEl = info.el.querySelector(".fc-event-title");
+            if (titleEl && !info.el.querySelector(".canceled-badge")) {
+              const badge = document.createElement("span");
+              badge.className = "canceled-badge";
+              badge.textContent = "Canceled";
+              titleEl.appendChild(badge);
+            }
+          }
+
+          // Tooltip (native title)
+          const parts = [];
+          if (category) parts.push(category);
+          if (location) parts.push(location);
+          if (canceled) parts.push("Canceled");
+          if (parts.length) info.el.title = parts.join(" • ");
+        }
+      });
+
+      calendar.render();
+
+      // Optional: re-render on resize to switch default view if desired
+      // (Leave disabled to avoid jarring view switches)
+    }
+
+    main();
+  </script>
+</body>
+</html>
