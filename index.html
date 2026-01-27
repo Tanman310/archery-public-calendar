@@ -205,7 +205,7 @@
     }
 
     async function main() {
-      if (!CSV_URL || CSV_URL.includes("YOUR_CSV_URL_HERE")) {
+      if (!CSV_URL || CSV_URL === "YOUR_CSV_URL_HERE") {
         setStatus("Error: Paste your published CSV URL into CSV_URL in index.html.", "error");
         return;
       }
