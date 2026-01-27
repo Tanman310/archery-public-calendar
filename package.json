@@ -1,0 +1,11 @@
+{
+    "name": "archery-public-calendar",
+    "private": true,
+    "version": "1.0.0",
+    "devDependencies": {
+        "html-validate": "^8.18.0"
+    },
+    "scripts": {
+        "validate:html": "html-validate \"index.html\""
+    }
+}
