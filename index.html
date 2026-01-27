@@ -288,13 +288,11 @@
         return sunday;
       }
 
-      const isMobile = window.matchMedia("(max-width: 640px)").matches;
-      const initialView = isMobile ? "listMonth" : "outlook";
       const outlookStartDate = getCurrentWeekSunday();
 
       const calendarEl = document.getElementById("calendar");
       const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView,
+        initialView: 'outlook',
         initialDate: outlookStartDate,
         height: "auto",
         nowIndicator: true,
