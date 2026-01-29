@@ -186,6 +186,89 @@
         font-size: 16px;
       }
     }
+
+    /* Past-date muting */
+    .fc .is-past {
+      background: #f3f4f6;
+    }
+    .fc .is-past .fc-daygrid-day-number {
+      color: #6b7280;
+    }
+    .fc .is-past .fc-daygrid-day-frame {
+      opacity: 0.65;
+    }
+    .fc .event-past {
+      opacity: 0.6;
+    }
+
+    /* Modal */
+    body.modal-open {
+      overflow: hidden;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      z-index: 9999;
+    }
+    .modal.open {
+      display: block;
+    }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+    }
+    .modal-panel {
+      position: relative;
+      max-width: 560px;
+      margin: 8vh auto;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+      padding: 18px 18px 16px;
+      width: calc(100% - 24px);
+    }
+    .modal-close {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      border: none;
+      background: transparent;
+      font-size: 28px;
+      line-height: 1;
+      cursor: pointer;
+      color: #374151;
+    }
+    .modal-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-right: 24px;
+    }
+    .modal-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+    .modal-meta {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+      color: #111827;
+    }
+
+    @media (max-width: 640px) {
+      .modal-panel {
+        margin: 10vh auto;
+        padding: 16px 14px 14px;
+      }
+      .modal-title {
+        font-size: 18px;
+      }
+    }
+
   </style>
 </head>
 
@@ -215,6 +298,16 @@
     <section id="calendar" class="card" aria-label="Event calendar"></section>
   </main>
 
+
+  <!-- Event Details Modal -->
+  <div id="eventModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-panel" role="document" aria-label="Event details">
+      <button class="modal-close" type="button" aria-label="Close" data-close>&times;</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
   <script type="module">
     import { toFullCalendarEvent } from "./src/calendar.js";
     /**
@@ -223,6 +316,86 @@
      * https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&single=true&output=csv
      */
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT3BCyENImsHmP4TtOg2PMZkauaCWHc8wu4xSSmeU-jUgKVn6U1jpVQCHK0ACZoUtzjenfqyhdNu4PF/pub?gid=1881779158&single=true&output=csv";
+
+
+    function startOfWeekSunday(dateLike) {
+      const d = new Date(dateLike);
+      d.setHours(0, 0, 0, 0);
+      const day = d.getDay(); // 0 = Sunday
+      d.setDate(d.getDate() - day);
+      return d;
+    }
+
+    function addDays(dateLike, days) {
+      const d = new Date(dateLike);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+
+    function formatDateLong(dateLike) {
+      if (!dateLike) return "";
+      return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(dateLike);
+    }
+
+    function formatTimeRange(start, end, allDay) {
+      if (allDay) return "All day";
+      const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+      if (!start && !end) return "";
+      if (start && end) return `${timeFmt.format(start)} – ${timeFmt.format(end)}`;
+      return start ? timeFmt.format(start) : timeFmt.format(end);
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function openEventModal(event) {
+      const modal = document.getElementById("eventModal");
+      const content = document.getElementById("modalContent");
+
+      const title = event.title || "Event";
+      const start = event.start;
+      const end = event.end;
+      const props = event.extendedProps || {};
+      const location = props.location || "";
+      const category = props.category || "";
+      const canceled = !!props.canceled;
+      const allDay = !!event.allDay;
+
+      const timeText = formatTimeRange(start, end, allDay);
+      const dateText = formatDateLong(start);
+
+      content.innerHTML = `
+        <div class="modal-title-row">
+          <h3 class="modal-title">${escapeHtml(title)}</h3>
+          ${canceled ? '<span class="canceled-badge" style="margin-left:auto;">Canceled</span>' : ""}
+        </div>
+        <div class="modal-meta">
+          <div><strong>Date:</strong> ${escapeHtml(dateText)}</div>
+          ${timeText ? `<div><strong>Time:</strong> ${escapeHtml(timeText)}</div>` : ""}
+          ${location ? `<div><strong>Location:</strong> ${escapeHtml(location)}</div>` : ""}
+          ${category ? `<div><strong>Category:</strong> ${escapeHtml(category)}</div>` : ""}
+        </div>
+      `;
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+    }
+
+    function closeEventModal() {
+      const modal = document.getElementById("eventModal");
+      if (!modal) return;
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+    }
+
 
     // Expected CSV headers (row 1):
     // Event Date, Start Time, End Time, Title, Location, Category, Canceled
@@ -309,7 +482,7 @@
       setUpdated(new Date());
 
       const isMobile = window.matchMedia("(max-width: 640px)").matches;
-      const initialView = isMobile ? "listMonth" : "dayGridMonth";
+      const initialView = isMobile ? "fourWeekList" : "fourWeekGrid";
 
       const calendarEl = document.getElementById("calendar");
       const calendar = new FullCalendar.Calendar(calendarEl, {
@@ -319,9 +492,40 @@
         headerToolbar: {
           left: "prev,next today",
           center: "title",
-          right: "dayGridMonth,timeGridWeek,listMonth"
+          right: ""
+        },
+        views: {
+          fourWeekGrid: { type: "dayGrid", duration: { weeks: 4 } },
+          fourWeekList: { type: "list", duration: { weeks: 4 } }
+        },
+        firstDay: 0,
+        fixedWeekCount: false,
+        showNonCurrentDates: true,
+        visibleRange: function(currentDate) {
+          const start = startOfWeekSunday(currentDate);
+          const end = addDays(start, 28);
+          return { start, end };
         },
         events,
+
+        dayCellClassNames: function(arg) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const cell = new Date(arg.date);
+          cell.setHours(0, 0, 0, 0);
+          return cell < today ? ["is-past"] : [];
+        },
+
+        eventClassNames: function(arg) {
+          const now = new Date();
+          const end = arg.event.end ? arg.event.end : arg.event.start;
+          return end && end < now ? ["event-past"] : [];
+        },
+
+        eventClick: function(info) {
+          info.jsEvent.preventDefault();
+          openEventModal(info.event);
+        },
 
         // Display times in 12-hour format
         eventTimeFormat: {
@@ -355,6 +559,28 @@
       });
 
       calendar.render();
+
+      // Modal wiring
+      const modalEl = document.getElementById("eventModal");
+      modalEl.addEventListener("click", (e) => {
+        if (e.target && e.target.matches("[data-close]")) closeEventModal();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modalEl.classList.contains("open")) closeEventModal();
+      });
+
+      // Auto-roll: keep the first week as the current Sunday–Saturday week
+      let lastWeekStart = startOfWeekSunday(new Date()).getTime();
+      setInterval(() => {
+        const now = new Date();
+        const weekStart = startOfWeekSunday(now).getTime();
+        if (weekStart !== lastWeekStart) {
+          lastWeekStart = weekStart;
+          calendar.gotoDate(now);
+        }
+        // Refresh past-event styling in list view
+        calendar.rerenderEvents();
+      }, 300000); // 5 minutes
 
       // Optional: re-render on resize to switch default view if desired
       // (Leave disabled to avoid jarring view switches)
