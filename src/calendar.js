@@ -59,24 +59,59 @@ export function isPastEvent(ev) {
 }
 
 export function toFullCalendarEvent(row) {
+    // Accept both the original schema and the simplified Public_Events schema.
     const eventDate = parseMMDDYYYY(row["Event Date"] ?? row["Date"]);
     if (!eventDate) { return null; }
 
-    const startTime = parseHHMM24(row["Start Time"] ?? row["Start"]);
-    const endTime = parseHHMM24(row["End Time"] ?? row["End"]);
+    const rawStart = row["Start Time"] ?? row["Start"];
+    const rawEnd = row["End Time"] ?? row["End"];
 
-    const title = String(row["Title"] ?? "").trim() || "Event";
+    const startTime = parseHHMM24(rawStart);
+    const endTime = parseHHMM24(rawEnd);
+
+    const title = String(row["Short Title"] ?? row["Event Title"] ?? row["Title"] ?? "").trim() || "Event";
     const location = String(row["Location"] ?? "").trim();
     const category = String(row["Category"] ?? "").trim() || "Other";
     const canceled = truthy(row["Canceled"]);
 
-    const allDay = !startTime;
-    const start = makeLocalDate(eventDate, startTime);
+    const categoryKey = category.trim().toLowerCase();
+    const isTask = categoryKey === "task";
+
+    // Time-shape classification (no duplicate logic elsewhere).
+    const isTba = !startTime && !endTime;
+    const isTimed = !!startTime && !!endTime && !isTask;
+    const isStartOnly = !!startTime && !endTime && !isTask;
+
+    const fmtTime = (t) => {
+        if (!t) { return ""; }
+        const d = new Date(2000, 0, 1, t.hh, t.min, 0, 0);
+        return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    };
+
+    const timeLabel = isTba
+        ? "TBA"
+        : isTask
+            ? (startTime ? `Due by ${fmtTime(startTime)}` : "Task")
+            : isTimed
+                ? `${fmtTime(startTime)}–${fmtTime(endTime)}`
+                : isStartOnly
+                    ? fmtTime(startTime)
+                    : "";
+
+    // Standardized behavior from classification:
+    // - TBA + Task are all-day for display; due-by time is stored in extendedProps.
+    // - Timed events are not all-day.
+    // - Start-only (non-task) events get an end time of 11:59 PM for future-proofing.
+    const allDay = isTba || isTask;
+
+    const start = makeLocalDate(eventDate, allDay ? null : startTime);
 
     let end = null;
-    if (endTime) {
+    if (isTimed && endTime) {
         end = makeLocalDate(eventDate, endTime);
-        if (end <= start) {end = null;}
+        if (end <= start) { end = null; }
+    } else if (isStartOnly) {
+        end = makeLocalDate(eventDate, { hh: 23, min: 59 });
     }
 
     const ev = {
@@ -87,13 +122,27 @@ export function toFullCalendarEvent(row) {
         extendedProps: {
             location,
             category,
-            canceled
+            canceled,
+            // classification flags
+            isTimed,
+            isTba,
+            isTask,
+            isStartOnly,
+            // standardized display text
+            timeLabel
         },
         classNames: []
     };
 
-    if (canceled) {ev.classNames.push("is-canceled");}
-    if (isPastEvent(ev)) {ev.classNames.push("is-past");}
+    // CSS classes driven from classification + category.
+    if (isTimed) { ev.classNames.push("is-timed"); }
+    if (isTba) { ev.classNames.push("is-tba"); }
+    if (isTask) { ev.classNames.push("is-task"); }
+    if (isStartOnly) { ev.classNames.push("is-start-only"); }
+
+    if (categoryKey) { ev.classNames.push(`cat-${categoryKey.replace(/\s+/g, "-")}`); }
+    if (canceled) { ev.classNames.push("is-canceled"); }
+    if (isPastEvent(ev)) { ev.classNames.push("is-past"); }
 
     return ev;
 }
