@@ -481,7 +481,7 @@
       setStatus(`Loaded ${events.length} events.`, "ok");
       setUpdated(new Date());
 
-      const isMobile = window.matchMedia("(max-width: 640px)").matches;
+      const isMobile = window.matchMedia("(max-width: 900px)").matches;
       const initialView = isMobile ? "fourWeekList" : "fourWeekGrid";
 
       const calendarEl = document.getElementById("calendar");
@@ -492,12 +492,24 @@
         headerToolbar: {
           left: "prev,next today",
           center: "title",
-          right: ""
+          right: "fourWeekGrid,fourWeekList"
         },
+        
         views: {
-          fourWeekGrid: { type: "dayGrid", duration: { weeks: 4 } },
-          fourWeekList: { type: "list", duration: { weeks: 4 } }
+         fourWeekGrid: {
+          type: "dayGrid",
+          duration: { weeks: 4 }
+         },
+         fourWeekList: {
+          type: "listWeek",
+          duration: { weeks: 4 }
+         }
         },
+        buttonText: {
+          fourWeekGrid: "4-Week",
+          fourWeekList: "List"
+        },
+
         firstDay: 0,
         fixedWeekCount: false,
         showNonCurrentDates: true,
