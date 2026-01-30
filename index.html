@@ -139,7 +139,7 @@
 
     /* Past events: dim */
     .fc-event.is-past {
-      opacity: 0.55;
+      opacity: 0.85;
     }
 
     /* Canceled events: strike + tag + dim a bit more */
@@ -150,7 +150,7 @@
     }
 
     .fc-event.is-canceled {
-      opacity: 0.45;
+      opacity: 0.85;
       filter: grayscale(0.25);
     }
 
@@ -203,7 +203,7 @@
 
     /* Modal */
     body.modal-open {
-      overflow: hidden;
+      overflow: auto;
     }
     .modal {
       position: fixed;
@@ -337,11 +337,13 @@
       return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(dateLike);
     }
 
-    function formatTimeRange(start, end, allDay) {
-      if (allDay) return "All day";
-      const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+    function formatTimeRange(start, end, allDay, isTba, timeLabel) {
+      if (isTba) return "TBA";
+      if (timeLabel) return timeLabel;
+      if (allDay) return "";
+      const timeFmt = new Int.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit"});
       if (!start && !end) return "";
-      if (start && end) return `${timeFmt.format(start)} – ${timeFmt.format(end)}`;
+      if (start && end) return `${timeFmt.format(start)} - ${timeFmt.format(end)}`;
       return start ? timeFmt.format(start) : timeFmt.format(end);
     }
 
@@ -366,8 +368,10 @@
       const category = props.category || "";
       const canceled = !!props.canceled;
       const allDay = !!event.allDay;
+      const isTba = !!props.isTba;
+      const timeLabel = props.timeLabel || "";
 
-      const timeText = formatTimeRange(start, end, allDay);
+      const timeText = formatTimeRange(start, end, allDay, isTba, timeLabel);
       const dateText = formatDateLong(start);
 
       content.innerHTML = `
@@ -498,7 +502,8 @@
         views: {
          fourWeekGrid: {
           type: "dayGrid",
-          duration: { weeks: 4 }
+          duration: { weeks: 4 },
+          eventDisplay: "list-item"
          },
          fourWeekList: {
           type: "listWeek",
@@ -550,24 +555,43 @@
         eventDidMount: function (info) {
           const { location, category, canceled } = info.event.extendedProps;
 
-          // Add canceled badge for quick scan
-          if (canceled) {
-            const titleEl = info.el.querySelector(".fc-event-title");
-            if (titleEl && !info.el.querySelector(".canceled-badge")) {
-              const badge = document.createElement("span");
-              badge.className = "canceled-badge";
-              badge.textContent = "Canceled";
-              titleEl.appendChild(badge);
-            }
-          }
+        // Standardize displayed time label (no implied midnight)
+        const { isTba, timeLabel } = info.event.extendedProps || {};
+        const desired = isTba ? "TBA" : (timeLabel || "");
 
-          // Tooltip (native title)
-          const parts = [];
-          if (category) parts.push(category);
-          if (location) parts.push(location);
-          if (canceled) parts.push("Canceled");
-          if (parts.length) info.el.title = parts.join(" • ");
+        // FullCalendar provides different time elements depending on view/type
+        let timeEl = info.el.querySelector(".fc-event-time, .fc-list-event-time");
+
+        if (!timeEl && desired && info.view.type === "fourWeekGrid") {
+          // dayGrid all-day items often have no time element — create one
+          const frame = info.el.querySelector(".fc-event-main-frame") || info.el;
+          timeEl = document.createElement("span");
+          timeEl.className = "fc-event-time";
+          frame.prepend(timeEl);
         }
+
+        if (timeEl) {
+          timeEl.textContent = desired;
+        }
+
+        // Add canceled badge for quick scan
+        if (canceled) {
+          const titleEl = info.el.querySelector(".fc-event-title");
+          if (titleEl && !info.el.querySelector(".canceled-badge")) {
+            const badge = document.createElement("span");
+            badge.className = "canceled-badge";
+            badge.textContent = "Canceled";
+            titleEl.appendChild(badge);
+          }
+        }
+
+        // Tooltip (native title)
+        const parts = [];
+        if (category) parts.push(category);
+        if (location) parts.push(location);
+        if (canceled) parts.push("Canceled");
+        if (parts.length) info.el.title = parts.join(" • ");
+      }
       });
 
       calendar.render();

@@ -39,6 +39,17 @@ export function parseHHMM24(s) {
     return { hh, min };
 }
 
+function formatTime12(timeObj) {
+    if (!timeObj) { return ""; }
+    let hh = timeObj.hh;
+    const min = String(timeObj.min).padStart(2, "0");
+    const ampm = hh >= 12 ? "PM" : "AM";
+    hh = hh % 12;
+    if (hh === 0) { hh = 12; }
+    return `${hh}:${min} ${ampm}`;
+}
+
+
 export function makeLocalDate(dateObj, timeObj) {
     const monthIndex = dateObj.mm - 1;
     if (!timeObj) { return new Date(dateObj.yyyy, monthIndex, dateObj.dd); }
@@ -59,88 +70,82 @@ export function isPastEvent(ev) {
 }
 
 export function toFullCalendarEvent(row) {
-    // Accept both the original schema and the simplified Public_Events schema.
     const eventDate = parseMMDDYYYY(row["Event Date"] ?? row["Date"]);
     if (!eventDate) { return null; }
 
-    const rawStart = row["Start Time"] ?? row["Start"];
-    const rawEnd = row["End Time"] ?? row["End"];
-
-    const startTime = parseHHMM24(rawStart);
-    const endTime = parseHHMM24(rawEnd);
-
-    const title = String(row["Short Title"] ?? row["Event Title"] ?? row["Title"] ?? "").trim() || "Event";
+    const title = String(row["Title"] ?? "").trim() || "Event";
     const location = String(row["Location"] ?? "").trim();
-    const category = String(row["Category"] ?? "").trim() || "Other";
+    const categoryRaw = String(row["Category"] ?? "").trim() || "Other";
+    const categoryKey = categoryRaw.toLowerCase().replace(/\s+/g, "-");
     const canceled = truthy(row["Canceled"]);
 
-    const categoryKey = category.trim().toLowerCase();
-    const isTask = categoryKey === "task";
+    // Time inputs (24h HH:MM). Note: For Task, Start is interpreted as "due by" time.
+    const startTime = parseHHMM24(row["Start Time"] ?? row["Start"]);
+    const endTime = parseHHMM24(row["End Time"] ?? row["End"]);
 
-    // Time-shape classification (no duplicate logic elsewhere).
-    const isTba = !startTime && !endTime;
-    const isTimed = !!startTime && !!endTime && !isTask;
-    const isStartOnly = !!startTime && !endTime && !isTask;
+    const isTask = categoryRaw.toLowerCase() === "task";
+    const isTba = !isTask && !startTime && !endTime;
+    const isTimed = !isTask && !!startTime && !!endTime;
+    const isStartOnly = !isTask && !!startTime && !endTime;
 
-    const fmtTime = (t) => {
-        if (!t) { return ""; }
-        const d = new Date(2000, 0, 1, t.hh, t.min, 0, 0);
-        return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    };
+    // Placement + normalization
+    let allDay = true;
+    let start = makeLocalDate(eventDate, null);
+    let end = undefined;
 
-    const timeLabel = isTba
-        ? "TBA"
-        : isTask
-            ? (startTime ? `Due by ${fmtTime(startTime)}` : "Task")
-            : isTimed
-                ? `${fmtTime(startTime)}–${fmtTime(endTime)}`
-                : isStartOnly
-                    ? fmtTime(startTime)
-                    : "";
+    // Display label (single source of truth for UI)
+    let timeLabel = "";
 
-    // Standardized behavior from classification:
-    // - TBA + Task are all-day for display; due-by time is stored in extendedProps.
-    // - Timed events are not all-day.
-    // - Start-only (non-task) events get an end time of 11:59 PM for future-proofing.
-    const allDay = isTba || isTask;
-
-    const start = makeLocalDate(eventDate, allDay ? null : startTime);
-
-    let end = null;
-    if (isTimed && endTime) {
+    if (isTba) {
+        allDay = true;
+        timeLabel = "TBA";
+    } else if (isTask) {
+        allDay = true;
+        // Tasks with a start time use it as a due-by time label; otherwise no time label.
+        if (startTime) {
+            timeLabel = `Due by ${formatTime12(startTime)}`;
+        }
+    } else if (isTimed) {
+        allDay = false;
+        start = makeLocalDate(eventDate, startTime);
         end = makeLocalDate(eventDate, endTime);
-        if (end <= start) { end = null; }
+        if (end <= start) { end = undefined; } // guard against bad data
+        timeLabel = `${formatTime12(startTime)}–${formatTime12(endTime)}`;
     } else if (isStartOnly) {
-        end = makeLocalDate(eventDate, { hh: 23, min: 59 });
+        allDay = false;
+        start = makeLocalDate(eventDate, startTime);
+        // Future-proof: treat as running until 11:59 PM same day.
+        end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 0, 0);
+        timeLabel = formatTime12(startTime);
+    } else {
+        // Non-task with some unexpected combination (e.g., end only). Treat as all-day with no time label.
+        allDay = true;
     }
 
     const ev = {
         title,
         start,
-        end: end || undefined,
+        end,
         allDay,
         extendedProps: {
             location,
-            category,
+            category: categoryRaw,
             canceled,
-            // classification flags
             isTimed,
             isTba,
             isTask,
             isStartOnly,
-            // standardized display text
             timeLabel
         },
-        classNames: []
+        classNames: [
+            `cat-${categoryKey}`,
+            ...(isTba ? ["is-tba"] : []),
+            ...(isTask ? ["is-task"] : []),
+            ...(isTimed ? ["is-timed"] : []),
+            ...(isStartOnly ? ["is-start-only"] : [])
+        ]
     };
 
-    // CSS classes driven from classification + category.
-    if (isTimed) { ev.classNames.push("is-timed"); }
-    if (isTba) { ev.classNames.push("is-tba"); }
-    if (isTask) { ev.classNames.push("is-task"); }
-    if (isStartOnly) { ev.classNames.push("is-start-only"); }
-
-    if (categoryKey) { ev.classNames.push(`cat-${categoryKey.replace(/\s+/g, "-")}`); }
     if (canceled) { ev.classNames.push("is-canceled"); }
     if (isPastEvent(ev)) { ev.classNames.push("is-past"); }
 
